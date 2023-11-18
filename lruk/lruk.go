@@ -19,7 +19,7 @@ import (
 // classical LRU algorithm is used to choose victim.
 type LRUKReplacer struct {
 	currSize     SizeT
-	replacerSize SizeT //   max frame number of replacer
+	replacerSize SizeT // max frame number of replacer
 	k            SizeT
 	mu           sync.RWMutex
 
