@@ -17,10 +17,10 @@ type Entry struct {
 	value any
 }
 
-func NewBucket(size SizeT) *Bucket {
+func NewBucket(size, depth SizeT) *Bucket {
 	return &Bucket{
 		size:  size,
-		depth: 0,
+		depth: depth,
 		list:  list.New(),
 	}
 }
