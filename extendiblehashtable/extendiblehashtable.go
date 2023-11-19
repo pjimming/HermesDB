@@ -1,6 +1,7 @@
 package extendiblehashtable
 
 import (
+	"github.com/pjimming/HermesDB/extendiblehashtable/bucket"
 	"sync"
 
 	. "github.com/pjimming/HermesDB/define"
@@ -12,13 +13,13 @@ type ExtendibleHashTable struct {
 	bucketSize  SizeT
 	numBuckets  SizeT
 	mu          sync.RWMutex
-	dir         []*Bucket
+	dir         []*bucket.Bucket
 }
 
 // NewExtendibleHashTable create an extendible hash table
 func NewExtendibleHashTable(bucketSize SizeT) *ExtendibleHashTable {
-	dir := make([]*Bucket, 0)
-	dir = append(dir, NewBucket(bucketSize, 0))
+	dir := make([]*bucket.Bucket, 0)
+	dir = append(dir, bucket.NewBucket(bucketSize, 0))
 	return &ExtendibleHashTable{
 		globalDepth: 0,
 		bucketSize:  bucketSize,
@@ -67,9 +68,10 @@ func (e *ExtendibleHashTable) Insert(key string, value any) {
 	for !e.dir[e.IndexOf(key)].Insert(key, value) {
 		// If the local depth of the bucket is equal to the global depth,
 		// increment the global depth and double the size of the directory.
-		if e.GetLocalDepth(e.IndexOf(key)) == e.GetGlobalDepth() {
+		if e.getLocalDepth(e.IndexOf(key)) == e.getGlobalDepth() {
 			e.globalDepth++
-			for i := 0; i < len(e.dir); i++ {
+			capacity := len(e.dir)
+			for i := 0; i < capacity; i++ {
 				e.dir = append(e.dir, e.dir[i])
 			}
 		}
@@ -80,8 +82,8 @@ func (e *ExtendibleHashTable) Insert(key string, value any) {
 		targetBucket.IncrementDepth()
 
 		// Split the bucket and redistribute directory pointers & the kv pairs in the bucket.
-		bucket0 := NewBucket(e.bucketSize, targetBucket.GetDepth())
-		bucket1 := NewBucket(e.bucketSize, targetBucket.GetDepth())
+		bucket0 := bucket.NewBucket(e.bucketSize, targetBucket.GetDepth())
+		bucket1 := bucket.NewBucket(e.bucketSize, targetBucket.GetDepth())
 		localDepthMask := uint32(1 << (targetBucket.GetDepth() - 1))
 		e.numBuckets++
 
@@ -98,8 +100,8 @@ func (e *ExtendibleHashTable) Insert(key string, value any) {
 
 		// bucket元素重新分配
 		for item := targetBucket.GetItems().Front(); item != nil; item = item.Next() {
-			entry := item.Value.(*Entry)
-			e.dir[e.IndexOf(entry.key)].Insert(entry.key, entry.value)
+			entry := item.Value.(*bucket.Entry)
+			e.dir[e.IndexOf(entry.GetKey())].Insert(entry.GetKey(), entry.GetValue())
 		}
 	}
 }
@@ -108,19 +110,33 @@ func (e *ExtendibleHashTable) Insert(key string, value any) {
 func (e *ExtendibleHashTable) GetGlobalDepth() SizeT {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return e.globalDepth
+	return e.getGlobalDepth()
 }
 
 // GetLocalDepth Get the local depth of the bucket that the given directory index points to.
 func (e *ExtendibleHashTable) GetLocalDepth(dirIndex uint32) SizeT {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return e.dir[dirIndex].GetDepth()
+	return e.getLocalDepth(dirIndex)
 }
 
 // GetNumBuckets Get the number of buckets in the directory.
 func (e *ExtendibleHashTable) GetNumBuckets() SizeT {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
+	return e.getNumBuckets()
+}
+
+// internal
+
+func (e *ExtendibleHashTable) getGlobalDepth() SizeT {
+	return e.globalDepth
+}
+
+func (e *ExtendibleHashTable) getLocalDepth(dirIndex uint32) SizeT {
+	return e.dir[dirIndex].GetDepth()
+}
+
+func (e *ExtendibleHashTable) getNumBuckets() SizeT {
 	return e.numBuckets
 }

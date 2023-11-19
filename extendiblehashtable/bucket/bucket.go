@@ -1,4 +1,4 @@
-package extendiblehashtable
+package bucket
 
 import (
 	"container/list"
@@ -71,3 +71,13 @@ func (b *Bucket) GetDepth() SizeT { return b.depth }
 func (b *Bucket) IncrementDepth() { b.depth++ }
 
 func (b *Bucket) GetItems() *list.List { return b.list }
+
+// == Entry ==
+
+func (e *Entry) GetKey() string {
+	return e.key
+}
+
+func (e *Entry) GetValue() any {
+	return e.value
+}
