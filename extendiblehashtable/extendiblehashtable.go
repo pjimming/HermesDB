@@ -15,6 +15,7 @@ type ExtendibleHashTable struct {
 	dir         []*Bucket
 }
 
+// NewExtendibleHashTable create an extendible hash table
 func NewExtendibleHashTable(bucketSize SizeT) *ExtendibleHashTable {
 	dir := make([]*Bucket, 0)
 	dir = append(dir, NewBucket(bucketSize, 0))
@@ -27,11 +28,14 @@ func NewExtendibleHashTable(bucketSize SizeT) *ExtendibleHashTable {
 	}
 }
 
+// IndexOf For the given key, return the entry index in the directory where the key hashes to.
 func (e *ExtendibleHashTable) IndexOf(key string) uint32 {
 	mask := uint32((1 << e.globalDepth) - 1)
 	return helper.Hash32([]byte(key)) & mask
 }
 
+// Find the value associated with the given key.
+// Use IndexOf(key) to find the directory index the key hashes to.
 func (e *ExtendibleHashTable) Find(key string) (value any, isFind bool) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
@@ -40,6 +44,7 @@ func (e *ExtendibleHashTable) Find(key string) (value any, isFind bool) {
 	return targetBucket.Find(key)
 }
 
+// Remove Given the key, remove the corresponding key-value pair in the hash table.
 func (e *ExtendibleHashTable) Remove(key string) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -99,18 +104,21 @@ func (e *ExtendibleHashTable) Insert(key string, value any) {
 	}
 }
 
+// GetGlobalDepth Get the global depth of the directory.
 func (e *ExtendibleHashTable) GetGlobalDepth() SizeT {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.globalDepth
 }
 
+// GetLocalDepth Get the local depth of the bucket that the given directory index points to.
 func (e *ExtendibleHashTable) GetLocalDepth(dirIndex uint32) SizeT {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.dir[dirIndex].GetDepth()
 }
 
+// GetNumBuckets Get the number of buckets in the directory.
 func (e *ExtendibleHashTable) GetNumBuckets() SizeT {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
