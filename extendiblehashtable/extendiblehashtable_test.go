@@ -13,7 +13,7 @@ import (
 func TestSampleEHT(t *testing.T) {
 	ast := assert.New(t)
 
-	table := NewExtendibleHashTable(2)
+	table := New(2)
 	table.Insert("1", "a")
 	table.Insert("2", "b")
 	table.Insert("3", "c")
@@ -54,7 +54,7 @@ func TestConcurrentInsert(t *testing.T) {
 
 	// Run concurrent test multiple times to guarantee correctness.
 	for run := 0; run < numRuns; run++ {
-		table := NewExtendibleHashTable(2)
+		table := New(2)
 
 		var wg sync.WaitGroup
 		for tid := 0; tid < numThreads; tid++ {

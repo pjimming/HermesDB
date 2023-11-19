@@ -26,31 +26,31 @@ type LRUKReplacer struct {
 	// accessCount < k_; 按首次访问时间戳进行排序，新来的放到表头
 	// timestamp: new -> old; 优先驱逐最靠近末尾的、可驱逐的帧
 	historyList *list.List
-	historyMap  map[FrameIdT]*list.Element
+	historyMap  map[string]*list.Element
 
 	// accessCount >= k_; 按倒数第k次访问时间戳排序，更新的放表头
 	// timestamp: new -> old; 如果history_list_为空，使用LRU算法，优先驱逐表尾
 	cacheList *list.List
-	cacheMap  map[FrameIdT]*list.Element
+	cacheMap  map[string]*list.Element
 
 	// other
-	accessCount map[FrameIdT]SizeT
-	isEvictable map[FrameIdT]bool
+	accessCount map[string]SizeT
+	isEvictable map[string]bool
 }
 
-// NewLRUKReplacer create a lru-k replacer
-func NewLRUKReplacer(numFrames, k SizeT) *LRUKReplacer {
+// New create a lru-k replacer
+func New(numFrames, k SizeT) *LRUKReplacer {
 	return &LRUKReplacer{
 		currSize:     0,
 		replacerSize: numFrames,
 		k:            k,
 		mu:           sync.RWMutex{},
 		historyList:  list.New(),
-		historyMap:   make(map[FrameIdT]*list.Element),
+		historyMap:   make(map[string]*list.Element),
 		cacheList:    list.New(),
-		cacheMap:     make(map[FrameIdT]*list.Element),
-		accessCount:  make(map[FrameIdT]SizeT),
-		isEvictable:  make(map[FrameIdT]bool),
+		cacheMap:     make(map[string]*list.Element),
+		accessCount:  make(map[string]SizeT),
+		isEvictable:  make(map[string]bool),
 	}
 }
 
@@ -63,83 +63,81 @@ func NewLRUKReplacer(numFrames, k SizeT) *LRUKReplacer {
 //
 // Successful eviction of a frame should decrement the size of replacer and remove the frame's
 // access history.
-func (r *LRUKReplacer) Evict() (FrameIdT, bool) {
+func (r *LRUKReplacer) Evict() (string, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if r.currSize == 0 {
-		return 0, false
+		return "", false
 	}
 
 	for e := r.historyList.Back(); e != nil; e = e.Prev() {
-		frameId, ok := e.Value.(FrameIdT)
+		key, ok := e.Value.(string)
 		if !ok {
-			panic("value is not FrameIdT")
+			panic("value is not string")
 		}
 
-		if !r.isEvictable[frameId] {
+		if !r.isEvictable[key] {
 			continue
 		}
 
 		r.historyList.Remove(e)
-		delete(r.historyMap, frameId)
-		r.clearFrame(frameId)
-		return frameId, true
+		delete(r.historyMap, key)
+		r.clearFrame(key)
+		return key, true
 	}
 
 	for e := r.cacheList.Back(); e != nil; e = e.Prev() {
-		frameId, ok := e.Value.(FrameIdT)
+		key, ok := e.Value.(string)
 		if !ok {
-			panic("value is not FrameIdT")
+			panic("value is not string")
 		}
 
-		if !r.isEvictable[frameId] {
+		if !r.isEvictable[key] {
 			continue
 		}
 
 		r.cacheList.Remove(e)
-		delete(r.cacheMap, frameId)
-		r.clearFrame(frameId)
-		return frameId, true
+		delete(r.cacheMap, key)
+		r.clearFrame(key)
+		return key, true
 	}
-	return 0, false
+	return "", false
 }
 
 // RecordAccess Record the event that the given frame id is accessed at current timestamp.
 // Create a new entry for access history if frame id has not been seen before.
 //
 // If frame id is invalid (i.e. larger than replacer_size_), throw an exception.
-func (r *LRUKReplacer) RecordAccess(frameId FrameIdT) {
+func (r *LRUKReplacer) RecordAccess(key string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.checkOverstep(frameId)
+	r.accessCount[key]++
 
-	r.accessCount[frameId]++
-
-	if r.accessCount[frameId] == r.k {
+	if r.accessCount[key] == r.k {
 		// history -> cache
-		r.historyList.Remove(r.historyMap[frameId])
-		delete(r.historyMap, frameId)
+		r.historyList.Remove(r.historyMap[key])
+		delete(r.historyMap, key)
 
-		r.cacheList.PushFront(frameId)
-		r.cacheMap[frameId] = r.cacheList.Front()
-	} else if r.accessCount[frameId] > r.k {
+		r.cacheList.PushFront(key)
+		r.cacheMap[key] = r.cacheList.Front()
+	} else if r.accessCount[key] > r.k {
 		// cache
-		if e, ok := r.cacheMap[frameId]; ok {
+		if e, ok := r.cacheMap[key]; ok {
 			r.cacheList.Remove(e)
 		}
 
-		r.cacheList.PushFront(frameId)
-		r.cacheMap[frameId] = r.cacheList.Front()
+		r.cacheList.PushFront(key)
+		r.cacheMap[key] = r.cacheList.Front()
 	} else {
 		// history
-		if e, ok := r.historyMap[frameId]; ok {
+		if e, ok := r.historyMap[key]; ok {
 			r.historyList.Remove(e)
 		}
 
-		r.historyList.PushFront(frameId)
-		r.historyMap[frameId] = r.historyList.Front()
+		r.historyList.PushFront(key)
+		r.historyMap[key] = r.historyList.Front()
 	}
 }
 
@@ -153,19 +151,17 @@ func (r *LRUKReplacer) RecordAccess(frameId FrameIdT) {
 // If frame id is invalid, throw an exception or abort the process.
 //
 // For other scenarios, this function should terminate without modifying anything.
-func (r *LRUKReplacer) SetEvictable(frameId FrameIdT, isEvict bool) {
+func (r *LRUKReplacer) SetEvictable(key string, isEvict bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.checkOverstep(frameId)
-
-	if _, ok := r.accessCount[frameId]; !ok {
+	if _, ok := r.accessCount[key]; !ok {
 		// not in buffer pool
 		return
 	}
 
 	sizeChange := 0
-	if isEvict != r.isEvictable[frameId] {
+	if isEvict != r.isEvictable[key] {
 		sizeChange = 1
 	}
 
@@ -175,7 +171,7 @@ func (r *LRUKReplacer) SetEvictable(frameId FrameIdT, isEvict bool) {
 		r.currSize -= SizeT(sizeChange)
 	}
 
-	r.isEvictable[frameId] = isEvict
+	r.isEvictable[key] = isEvict
 }
 
 // Remove an evictable frame from replacer, along with its access history.
@@ -189,32 +185,30 @@ func (r *LRUKReplacer) SetEvictable(frameId FrameIdT, isEvict bool) {
 // process.
 //
 // If specified frame is not found, directly return from this function.
-func (r *LRUKReplacer) Remove(frameId FrameIdT) {
+func (r *LRUKReplacer) Remove(key string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.checkOverstep(frameId)
-
-	if _, ok := r.accessCount[frameId]; !ok {
+	if _, ok := r.accessCount[key]; !ok {
 		// not in buffer pool
 		return
 	}
 
-	if !r.isEvictable[frameId] {
-		panic(fmt.Errorf("[Remove] %d can not to remove", frameId))
+	if !r.isEvictable[key] {
+		panic(fmt.Errorf("[Remove] %v can not to remove", key))
 	}
 
-	if r.accessCount[frameId] >= r.k {
+	if r.accessCount[key] >= r.k {
 		// cache
-		r.cacheList.Remove(r.cacheMap[frameId])
-		delete(r.cacheMap, frameId)
+		r.cacheList.Remove(r.cacheMap[key])
+		delete(r.cacheMap, key)
 	} else {
 		// history
-		r.historyList.Remove(r.historyMap[frameId])
-		delete(r.historyMap, frameId)
+		r.historyList.Remove(r.historyMap[key])
+		delete(r.historyMap, key)
 	}
 
-	r.clearFrame(frameId)
+	r.clearFrame(key)
 }
 
 // Size Return replacer's size, which tracks the number of evictable frames.
@@ -226,14 +220,14 @@ func (r *LRUKReplacer) Size() SizeT {
 
 // internal
 
-func (r *LRUKReplacer) clearFrame(frameId FrameIdT) {
-	delete(r.accessCount, frameId)
-	delete(r.isEvictable, frameId)
+func (r *LRUKReplacer) clearFrame(key string) {
+	delete(r.accessCount, key)
+	delete(r.isEvictable, key)
 	r.currSize--
 }
 
-func (r *LRUKReplacer) checkOverstep(frameId FrameIdT) {
-	if frameId > FrameIdT(r.replacerSize) {
-		panic(fmt.Errorf("[RecordAccess] %d upper than replacer size", frameId))
-	}
-}
+//func (r *LRUKReplacer) checkOverstep(key string) {
+//	if key > string(r.replacerSize) {
+//		panic(fmt.Errorf("[RecordAccess] %d uppermore than replacer size", key))
+//	}
+//}

@@ -16,8 +16,8 @@ type ExtendibleHashTable struct {
 	dir         []*bucket.Bucket
 }
 
-// NewExtendibleHashTable create an extendible hash table
-func NewExtendibleHashTable(bucketSize SizeT) *ExtendibleHashTable {
+// New create an extendible hash table
+func New(bucketSize SizeT) *ExtendibleHashTable {
 	dir := make([]*bucket.Bucket, 0)
 	dir = append(dir, bucket.NewBucket(bucketSize, 0))
 	return &ExtendibleHashTable{
