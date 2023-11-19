@@ -1,12 +1,13 @@
 package extendiblehashtable
 
 import (
-	"github.com/pjimming/HermesDB/define"
 	"strconv"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/pjimming/HermesDB/define"
 )
 
 func TestSampleEHT(t *testing.T) {

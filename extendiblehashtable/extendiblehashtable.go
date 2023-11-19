@@ -1,10 +1,10 @@
 package extendiblehashtable
 
 import (
-	"github.com/pjimming/HermesDB/extendiblehashtable/bucket"
 	"sync"
 
 	. "github.com/pjimming/HermesDB/define"
+	"github.com/pjimming/HermesDB/extendiblehashtable/bucket"
 	"github.com/pjimming/HermesDB/helper"
 )
 
