@@ -159,7 +159,7 @@ func (r *LRUKReplacer) SetEvictable(frameId FrameIdT, isEvict bool) {
 
 	r.checkOverstep(frameId)
 
-	if _, ok := r.isEvictable[frameId]; !ok {
+	if _, ok := r.accessCount[frameId]; !ok {
 		// not in buffer pool
 		return
 	}
